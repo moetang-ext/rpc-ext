@@ -28,6 +28,8 @@ var commonReaderImpl = commonReader{}
 type commonReader struct {
 }
 
+//TODO return value may be: BulkString(NullString), SimpleString, Error
+
 func (this commonReader) ParseBulkString(r *bufio.Reader, resp *BulkString) error {
 	var length int
 	data, err := r.ReadBytes('\n')
@@ -58,6 +60,15 @@ func (this commonReader) ParseBulkString(r *bufio.Reader, resp *BulkString) erro
 			return nil
 		}
 	}
+}
+
+func (this commonReader) ParseSimpleString(r *bufio.Reader, resp *string) error {
+	data, err := r.ReadBytes('\n')
+	if err != nil {
+		return err
+	}
+	*resp = string(data[1 : len(data)-2])
+	return nil
 }
 
 //================

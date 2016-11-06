@@ -15,6 +15,27 @@ func main() {
 		panic(err)
 	}
 
+	//methodInfo(c)
+	methodSet(c)
+}
+
+func methodSet(c rpc.Client) {
+	var result string
+	var req rpc.Param
+	req.Request = client.SetReq{
+		Key:        []byte("aaaa"),
+		Value:      []byte("value_a"),
+		ExpireMode: client.SET_EXPIRE_MILLIS_SECOND,
+		ExpireCnt:  5,
+		SetMode:    client.SET_NX,
+	}
+	req.Method = client.REDIS_METHOD_SET
+	timeout, err := c.Call(req, &result)
+	fmt.Println(result)
+	fmt.Println(timeout, err)
+}
+
+func methodInfo(c rpc.Client) {
 	var result = new(client.BulkString)
 	var req rpc.Param
 	req.Method = client.REDIS_METHOD_INFO
@@ -32,5 +53,4 @@ func main() {
 
 	timeout, err = c.Call(req, result)
 	fmt.Println(len(result.Data()))
-
 }

@@ -17,6 +17,7 @@ const (
 	REDIS_METHOD_INFO  = "INFO"
 	REDIS_METHOD_GET   = "GET"
 	REDIS_METHOD_SET   = "SET"
+	REDIS_METHOD_DEL   = "DEL"
 
 	_REDIS_SERVER_ADDRESS = "redis.server.addr"
 )
@@ -24,6 +25,7 @@ const (
 func init() {
 	rpc.RegisterClientFactory(REDIS_SERVICE_NAME, new(clientFactoryImpl))
 	rpc.RegisterMethodFactory(REDIS_SERVICE_NAME, REDIS_METHOD_INFO, reflect.TypeOf([]byte{}), reflect.TypeOf(new(BulkString)))
+	rpc.RegisterMethodFactory(REDIS_SERVICE_NAME, REDIS_METHOD_SET, reflect.TypeOf(SetReq{}), reflect.TypeOf(new(string)))
 }
 
 var _ rpc.ClientFactory = &clientFactoryImpl{}
@@ -72,14 +74,31 @@ func (this *clientSingleImpl) Call(param rpc.Param, resultPtr interface{}) (bool
 
 	var toSend []byte
 	switch param.Method {
-	case "INFO":
+	case REDIS_METHOD_INFO:
 		toSend = Parser().MethodInfo(param.Request)
 		_, err := this.c.Write(toSend)
 		if err != nil {
 			return false, err
 		}
 		err = ProtocolCommonReader().ParseBulkString(this.bufIo, resultPtr.(*BulkString))
-		return true, err
+		if err != nil {
+			return false, err
+		}
+		return true, nil
+	case REDIS_METHOD_SET:
+		data, err := param.Request.(SetReq).ToBytes()
+		if err != nil {
+			return false, err
+		}
+		_, err = this.c.Write(data)
+		if err != nil {
+			return false, err
+		}
+		err = ProtocolCommonReader().ParseSimpleString(this.bufIo, resultPtr.(*string))
+		if err != nil {
+			return false, err
+		}
+		return true, nil
 	default:
 		return false, errorutil.New("unknown method=" + param.Method)
 	}
