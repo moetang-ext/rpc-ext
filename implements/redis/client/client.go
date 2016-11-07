@@ -2,8 +2,10 @@ package client
 
 import (
 	"bufio"
+	"bytes"
 	"net"
 	"reflect"
+	"strconv"
 	"sync"
 	"time"
 
@@ -23,14 +25,18 @@ const (
 )
 
 func init() {
-	rpc.RegisterClientFactory(REDIS_SERVICE_NAME, new(clientFactoryImpl))
+	cf := new(clientFactoryImpl)
+	cf.methodMap = make(map[string]bool)
+	rpc.RegisterClientFactory(REDIS_SERVICE_NAME, cf)
 	rpc.RegisterMethodFactory(REDIS_SERVICE_NAME, REDIS_METHOD_INFO, reflect.TypeOf([]byte{}), reflect.TypeOf(new(BulkString)))
 	rpc.RegisterMethodFactory(REDIS_SERVICE_NAME, REDIS_METHOD_SET, reflect.TypeOf(SetReq{}), reflect.TypeOf(new(string)))
+	rpc.RegisterMethodFactory(REDIS_SERVICE_NAME, REDIS_METHOD_GET, reflect.TypeOf([]byte{}), reflect.TypeOf(new(BulkString)))
 }
 
 var _ rpc.ClientFactory = &clientFactoryImpl{}
 
 type clientFactoryImpl struct {
+	methodMap map[string]bool
 }
 
 func (this *clientFactoryImpl) CreateClient(config map[string]string) (rpc.FullClient, error) {
@@ -69,13 +75,12 @@ func (this *clientSingleImpl) AsyncCall(param rpc.Param, resultPtr interface{}) 
 }
 
 func (this *clientSingleImpl) Call(param rpc.Param, resultPtr interface{}) (bool, error) {
-	this.Lock()
-	defer this.Unlock()
-
 	var toSend []byte
 	switch param.Method {
 	case REDIS_METHOD_INFO:
 		toSend = Parser().MethodInfo(param.Request)
+		this.Lock()
+		defer this.Unlock()
 		_, err := this.c.Write(toSend)
 		if err != nil {
 			return false, err
@@ -90,11 +95,35 @@ func (this *clientSingleImpl) Call(param rpc.Param, resultPtr interface{}) (bool
 		if err != nil {
 			return false, err
 		}
+		this.Lock()
+		defer this.Unlock()
 		_, err = this.c.Write(data)
 		if err != nil {
 			return false, err
 		}
 		err = ProtocolCommonReader().ParseSimpleString(this.bufIo, resultPtr.(*string))
+		if err != nil {
+			return false, err
+		}
+		return true, nil
+	case REDIS_METHOD_GET:
+		reqData := param.Request.([]byte)
+		if len(reqData) == 0 {
+			return false, errorutil.New("request key is empty")
+		}
+		buf := new(bytes.Buffer)
+		buf.WriteString("*2\r\n")
+		buf.WriteString("$3\r\nGET\r\n")
+		buf.WriteString("$" + strconv.Itoa(len(reqData)) + "\r\n")
+		buf.Write(reqData)
+		buf.WriteString("\r\n")
+		this.Lock()
+		defer this.Unlock()
+		_, err := this.c.Write(buf.Bytes())
+		if err != nil {
+			return false, err
+		}
+		err = ProtocolCommonReader().ParseBulkString(this.bufIo, resultPtr.(*BulkString))
 		if err != nil {
 			return false, err
 		}

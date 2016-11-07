@@ -16,7 +16,19 @@ func main() {
 	}
 
 	//methodInfo(c)
-	methodSet(c)
+	//methodSet(c)
+	methodGet(c)
+}
+
+func methodGet(c rpc.Client) {
+	var result = new(client.BulkString)
+	var req rpc.Param
+	req.Request = []byte("bbbb")
+	req.Method = client.REDIS_METHOD_GET
+	timeout, err := c.Call(req, result)
+	fmt.Println(result)
+	fmt.Println(string(result.Data()))
+	fmt.Println(timeout, err)
 }
 
 func methodSet(c rpc.Client) {
